@@ -1,0 +1,173 @@
+val ecs = use("ecs.sx")
+
+pub type EntityId = {
+    value: u32
+}
+
+pub type Transform = {
+    position: ecs.Vec3
+    scale: f32
+    rotation_y: f32
+}
+
+pub type Velocity = {
+    value: ecs.Vec3
+}
+
+pub type Renderable = {
+    sphere: bool
+    material: ecs.SurfaceMaterial
+    rotation_speed: f32
+}
+
+pub type World = {
+    next_entity: mut u32
+    transform_entities: mut list[EntityId]
+    transforms: mut list[Transform]
+    velocity_entities: mut list[EntityId]
+    velocities: mut list[Velocity]
+    renderable_entities: mut list[EntityId]
+    renderables: mut list[Renderable]
+    light: mut ecs.PointLight
+    gravity: mut f32
+    floor: mut option[ecs.FloorCollider]
+    water: mut option[ecs.WaterSurface]
+}
+
+pub fn new_world() World = {
+    return {
+        next_entity: 1 as u32,
+        transform_entities: [],
+        transforms: [],
+        velocity_entities: [],
+        velocities: [],
+        renderable_entities: [],
+        renderables: [],
+        light: ecs.default_light(),
+        gravity: 9.8 as f32,
+        floor: none,
+        water: none
+    }
+}
+
+pub fn create_entity(world: mut World) EntityId = {
+    val entity: EntityId = { value: world.next_entity }
+    world.next_entity = world.next_entity + (1 as u32)
+    return entity
+}
+
+fn find_entity_index(entities: list[EntityId], entity: EntityId) option[usize] = {
+    val index: mut usize = 0 as usize
+    for candidate in entities {
+        if candidate.value == entity.value { return some index }
+        index += (1 as usize)
+    }
+    return none
+}
+
+pub fn set_transform(world: mut World, entity: EntityId, component: Transform) void = {
+    if find_entity_index(world.transform_entities, entity) is some index {
+        @set(world.transforms, index, component)
+        return
+    }
+    @append(world.transform_entities, entity)
+    @append(world.transforms, component)
+}
+
+pub fn set_velocity(world: mut World, entity: EntityId, component: Velocity) void = {
+    if find_entity_index(world.velocity_entities, entity) is some index {
+        @set(world.velocities, index, component)
+        return
+    }
+    @append(world.velocity_entities, entity)
+    @append(world.velocities, component)
+}
+
+pub fn set_renderable(world: mut World, entity: EntityId, component: Renderable) void = {
+    if find_entity_index(world.renderable_entities, entity) is some index {
+        @set(world.renderables, index, component)
+        return
+    }
+    @append(world.renderable_entities, entity)
+    @append(world.renderables, component)
+}
+
+pub fn get_transform(world: World, entity: EntityId) option[Transform] = {
+    if find_entity_index(world.transform_entities, entity) is some index {
+        return @get(world.transforms, index)
+    }
+    return none
+}
+
+pub fn get_velocity(world: World, entity: EntityId) option[Velocity] = {
+    if find_entity_index(world.velocity_entities, entity) is some index {
+        return @get(world.velocities, index)
+    }
+    return none
+}
+
+pub fn sphere_renderable(material: ecs.SurfaceMaterial) Renderable = {
+    return { sphere: true, material: material, rotation_speed: 0.0 as f32 }
+}
+
+pub fn cube_renderable(material: ecs.SurfaceMaterial, rotation_speed: f32) Renderable = {
+    return { sphere: false, material: material, rotation_speed: rotation_speed }
+}
+
+pub fn make_transform(position: ecs.Vec3, scale: f32) Transform = {
+    return { position: position, scale: scale, rotation_y: 0.0 as f32 }
+}
+
+pub fn make_velocity(x: f32, y: f32, z: f32) Velocity = {
+    return { value: ecs.make_vec3(x, y, z) }
+}
+
+pub fn to_scene(world: World) ecs.Scene3D = {
+    val scene: mut ecs.Scene3D = ecs.new_scene(world.light)
+    scene.gravity = world.gravity
+    scene.floor = world.floor
+    scene.water = world.water
+
+    val index: mut usize = 0 as usize
+    for entity in world.renderable_entities {
+        if @get(world.renderables, index) is some renderable {
+            if get_transform(world, entity) is some transform {
+                if renderable.sphere {
+                    val item: mut ecs.SphereEntity = ecs.make_sphere_with_material(
+                        transform.position,
+                        transform.scale,
+                        renderable.material
+                    )
+                    if get_velocity(world, entity) is some velocity {
+                        item.velocity = velocity.value
+                    }
+                    @append(scene.spheres, item)
+                } else {
+                    val item: mut ecs.CubeEntity = ecs.make_cube_with_material(
+                        transform.position,
+                        transform.scale,
+                        renderable.rotation_speed,
+                        renderable.material
+                    )
+                    if get_velocity(world, entity) is some velocity {
+                        item.velocity = velocity.value
+                    }
+                    @append(scene.cubes, item)
+                }
+            }
+        }
+        index += (1 as usize)
+    }
+    return scene
+}
+
+test {
+    val world: mut World = new_world()
+    val entity: EntityId = create_entity(world)
+    set_transform(world, entity, make_transform(ecs.make_vec3(1.0 as f32, 2.0 as f32, 3.0 as f32), 0.5 as f32))
+    set_velocity(world, entity, make_velocity(0.0 as f32, 1.0 as f32, 0.0 as f32))
+    set_renderable(world, entity, sphere_renderable(ecs.default_sphere_material(ecs.make_vec3(1.0 as f32, 0.0 as f32, 0.0 as f32))))
+    val scene: ecs.Scene3D = to_scene(world)
+    assert @len(scene.spheres) == (1 as usize)
+    assert @len(scene.cubes) == (0 as usize)
+}
