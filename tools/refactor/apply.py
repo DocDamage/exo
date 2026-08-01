@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-from tools.refactor import patch_assets, patch_gpu, patch_render, patch_runtime
+from tools.refactor import patch_assets, patch_gpu, patch_postprocess, patch_render, patch_runtime
 
 ROOT = Path(__file__).resolve().parents[2]
 ENGINE = ROOT / "src" / "engine.sx"
@@ -16,7 +16,7 @@ def main() -> int:
     if MARKER in text:
         print("engine hardening already applied")
         return 0
-    for patch in (patch_gpu, patch_runtime, patch_assets, patch_render):
+    for patch in (patch_gpu, patch_runtime, patch_assets, patch_render, patch_postprocess):
         text = patch.apply(text)
     ENGINE.write_text(text, encoding="utf-8")
     print("applied Exo engine hardening")
