@@ -1,5 +1,6 @@
 val ecs    = use("ecs.sx")
 val engine = use("engine.sx")
+val exo    = use("exo.sx")
 
 pub fn default_config() engine.ExoConfig = {
     return engine.default_config()
@@ -33,6 +34,10 @@ pub fn create_configured_app(config: engine.ExoConfig, scene: ecs.Scene3D, camer
     return engine.create_app(config, scene, camera, input)
 }
 
+pub fn build_checked(builder: engine.ExoAppBuilder) option[engine.ExoApp] = {
+    return exo.build_checked(builder)
+}
+
 pub fn run(app: engine.ExoApp) i32 = trust {
-    return engine.run_app(app)
+    return exo.run(app)
 }

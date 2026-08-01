@@ -1,5 +1,6 @@
 #version 450
 
+// Full-screen triangle vertex shader for tone mapping, bloom and gamma correction.
 layout(location = 0) out vec2 vTexCoord;
 
 void main() {

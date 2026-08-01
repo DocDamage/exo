@@ -5,7 +5,7 @@ layout(location = 0) out vec4 FragColor;
 
 layout(set = 2, binding = 0) uniform sampler2D uSceneTex;
 
-layout(set = 3, binding = 0, std140) uniform FxaaUniforms {
+layout(set = 3, binding = 0, std140) uniform PostprocessUniforms {
     vec4 uTexelSize;
 };
 

@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - agent/exo-engine-hardening-refactor
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exo-ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Validate Python tooling
+        run: python -m compileall -q scripts
+      - name: Validate repository invariants
+        run: |
+          git diff --check
+          python scripts/check_repo.py
+      - name: Validate shell entrypoint
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck scripts/build.sh
+
+  shaders:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install GLSL compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y glslang-tools
+      - name: Compile and validate shaders
+        run: python scripts/compile_shaders.py --clean --check
+
+  linux-build:
+    needs: [repository-checks, shaders]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang cmake curl git glslang-tools ninja-build pkg-config
+
+      - name: Build and install headless SDL3 3.4.8
+        run: |
+          git clone --depth 1 --branch release-3.4.8 https://github.com/libsdl-org/SDL.git /tmp/SDL
+          cmake -S /tmp/SDL -B /tmp/SDL-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=ON \
+            -DSDL_STATIC=OFF \
+            -DSDL_INSTALL=ON \
+            -DSDL_UNIX_CONSOLE_BUILD=ON \
+            -DSDL_TEST_LIBRARY=OFF \
+            -DSDL_TESTS=OFF
+          cmake --build /tmp/SDL-build --parallel 2
+          sudo cmake --install /tmp/SDL-build
+          sudo ldconfig
+
+      - name: Install Spectre toolchain
+        shell: bash
+        run: |
+          curl --fail --location --proto '=https' --tlsv1.2 https://spectrelang.org/get.sh --output /tmp/get-spectre.sh
+          sh /tmp/get-spectre.sh
+          SPECTRE_BIN="$(command -v spectre || find "$HOME" -type f -name spectre -perm -111 -print -quit)"
+          if [ -z "$SPECTRE_BIN" ]; then
+            echo "Spectre installer completed but no compiler was found." >&2
+            exit 1
+          fi
+          echo "$(dirname "$SPECTRE_BIN")" >> "$GITHUB_PATH"
+
+      - name: Build and run Spectre tests
+        run: |
+          spectre -v
+          ./scripts/build.sh test
+          ./build/bin/exo-tests
+
+      - name: Compile maintained examples
+        run: |
+          ./scripts/build.sh dev
+          ./scripts/build.sh hello
+          ./scripts/build.sh snow

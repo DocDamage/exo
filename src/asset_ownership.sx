@@ -1,0 +1,32 @@
+val ecs    = use("ecs.sx")
+val engine = use("engine.sx")
+
+fn pointer_seen(seen: list[ref u8], pointer: ref u8) bool = {
+    for candidate in seen {
+        if candidate == pointer { return true }
+    }
+    return false
+}
+
+pub fn release_scene_model(scene: mut ref ecs.Scene3D) void = trust {
+    if scene == none { return }
+    engine.destroy_glb_model(@addr(scene.model))
+}
+
+pub fn release_scene_models(scenes: mut list[ecs.Scene3D]) void = trust {
+    val released_bytes: mut list[ref u8] = []
+    val index: mut usize = 0 as usize
+
+    for scene_value in scenes {
+        val scene: mut ecs.Scene3D = scene_value
+        val bytes: ref u8 = scene.model.raw_bytes
+        if bytes != none && !pointer_seen(released_bytes, bytes) {
+            @append(released_bytes, bytes)
+            engine.destroy_glb_model(@addr(scene.model))
+        } else {
+            scene.model = ecs.empty_model()
+        }
+        @set(scenes, index, scene)
+        index += (1 as usize)
+    }
+}

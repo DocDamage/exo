@@ -1,3 +1,4 @@
+# Spectre/compiler output
 spectrelib
 out.c
 spectre-dev
@@ -5,7 +6,25 @@ SPECTRE_LANGUAGE_REFERENCE.md
 lib/
 std__*
 s-out/
+exo
 exo-dev
 flightsim
-*.spv
 AUDIT*
+
+# Exo generated output
+build/
+dist/
+*.o
+*.obj
+*.spv
+*.exe
+
+# Python tooling
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editor and platform files
+.DS_Store
+.vscode/
+.idea/

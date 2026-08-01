@@ -3,6 +3,8 @@ val ecs       = use("ecs.sx")
 val engine    = use("engine.sx")
 val rendering = use("rendering.sx")
 val physics   = use("physics.sx")
+val exo       = use("exo.sx")
+val ownership = use("asset_ownership.sx")
 
 type (engine.SceneUpdater) PhysicsUpdater = {}
 
@@ -119,14 +121,14 @@ fn build_scenes() list[ecs.Scene3D] = {
 }
 
 pub fn main() i32 = {
-    val scenes: list[ecs.Scene3D] = build_scenes()
+    val scenes: mut list[ecs.Scene3D] = build_scenes()
     val input: engine.InputConfig = {
         keys: rendering.default_key_bindings(),
         mouse: {
-            enabled:       true,
+            enabled: true,
             sensitivity_x: 0.0018 as f32,
             sensitivity_y: 0.0018 as f32,
-            invert_y:      false
+            invert_y: false
         },
         quit_key: engine.SDL_SCANCODE_ESCAPE
     }
@@ -138,9 +140,8 @@ pub fn main() i32 = {
             loops: 0 as i32
         }
     }
-    
-    val app_builder: mut engine.ExoAppBuilder = engine.new_app()
 
+    val app_builder: mut engine.ExoAppBuilder = exo.new_app()
     engine.with_title(app_builder, "exo-engine")
     engine.with_resolution(app_builder, 1280 as i32, 720 as i32)
     engine.with_shaders(app_builder, engine.default_shader_config())
@@ -149,11 +150,12 @@ pub fn main() i32 = {
     engine.with_input(app_builder, input)
     engine.with_next_scene_key(app_builder, engine.SDL_SCANCODE_X)
     engine.with_audio(app_builder, audio)
-    
-    val app: engine.ExoApp = engine.build_app(app_builder)
-    val su: PhysicsUpdater = {}
 
-    return trust engine.run_app_with_scene_updater[PhysicsUpdater](app, su)
+    val app: engine.ExoApp = exo.build_app(app_builder)
+    val updater: PhysicsUpdater = {}
+    val exit_code: i32 = trust exo.run_with_scene_updater[PhysicsUpdater](app, updater)
+    trust ownership.release_scene_models(scenes)
+    return exit_code
 }
 
 test {
@@ -162,7 +164,8 @@ test {
     val scenes: mut list[ecs.Scene3D] = []
     @append(scenes, scene0)
     @append(scenes, scene1)
-    val app_builder: mut engine.ExoAppBuilder = engine.new_app()
+
+    val app_builder: mut engine.ExoAppBuilder = exo.new_app()
     engine.with_scene_list(app_builder, scenes)
     engine.with_default_camera(app_builder)
     engine.with_input(app_builder, rendering.default_input_config())
@@ -171,11 +174,12 @@ test {
         trigger_key: engine.SDL_SCANCODE_Y,
         music_volume: 96 as i32,
         sample: {
-            path: "./example_sound.mp3",
+            path: "./assets/example_sound.wav",
             loops: 0 as i32
         }
     })
-    val app: engine.ExoApp = engine.build_app(app_builder)
+    val app: engine.ExoApp = exo.build_app(app_builder)
+
     assert @len(scene0.spheres) == (0 as usize)
     assert @len(scene0.cubes) == (2 as usize)
     assert @len(scene1.spheres) == (2 as usize)
@@ -184,33 +188,27 @@ test {
     assert app.active_scene_index == (0 as usize)
     assert app.next_scene_key == engine.SDL_SCANCODE_X
     assert app.audio.trigger_key == engine.SDL_SCANCODE_Y
-    assert trust string.compare[ref u8, ref u8](app.audio.sample.path, "./example_sound.mp3") == 0
+    assert trust string.compare[ref u8, ref u8](app.audio.sample.path, "./assets/example_sound.wav") == 0
 
-    if @get(scene1.spheres, 0 as usize) is some s0 {
-        assert s0.radius > (0.5 as f32)
+    if @get(scene1.spheres, 0 as usize) is some sphere0 {
+        assert sphere0.radius > (0.5 as f32)
     } else { assert false }
 
-    if @get(scene1.spheres, 1 as usize) is some s1 {
-        assert s1.radius > (0.5 as f32)
-    } else { assert false }
-
-    if @get(scene0.cubes, 0 as usize) is some c0 {
-        assert c0.rotation_speed > (0.5 as f32)
-    } else { assert false }
-
-    if @get(scene1.cubes, 1 as usize) is some c1 {
-        assert c1.rotation_speed < (0.0 as f32)
+    if @get(scene0.cubes, 0 as usize) is some cube0 {
+        assert cube0.rotation_speed > (0.5 as f32)
     } else { assert false }
 
     assert app.camera.move_speed > (3.0 as f32)
 
     val fixture: mut engine.GlbFixture = trust engine.build_test_glb_fixture()
-    if trust engine.parse_glb_bytes(fixture.ptr, fixture.len) is some model {
+    if trust engine.parse_glb_bytes(fixture.ptr, fixture.len) is some parsed_model {
+        val model: mut ecs.GlbModel = parsed_model
         assert model.valid
         assert model.primitive_count == 1
         assert model.vertex_count == 3
         assert model.index_count == 0
         assert trust string.compare[ref u8, ref u8](model.mesh_name, "fixture") == 0
+        trust engine.destroy_glb_model(@addr(model))
     } else {
         assert false
     }

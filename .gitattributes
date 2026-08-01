@@ -1,5 +1,6 @@
-*.c linguist-generated
-*.h linguist-generated
-*.sh linguist-generated
-*.ll linguist-generated
-*.ps1 linguist-generated
+src/stb_image.h linguist-vendored
+src/stb_image_shim.c linguist-generated=false
+*.spv binary
+*.glb binary
+*.wav binary
+*.png binary

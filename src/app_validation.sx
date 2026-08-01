@@ -1,0 +1,14 @@
+val engine = use("engine.sx")
+
+pub fn validate_builder(builder: engine.ExoAppBuilder) bool = {
+    return engine.app_builder_valid(builder)
+}
+
+pub fn build_checked(builder: engine.ExoAppBuilder) option[engine.ExoApp] = {
+    if !validate_builder(builder) { return none }
+    return some engine.build_app(builder)
+}
+
+pub fn build_with_safe_defaults(builder: engine.ExoAppBuilder) engine.ExoApp = {
+    return engine.build_app(builder)
+}

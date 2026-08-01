@@ -1,55 +1,134 @@
 val ecs = use("ecs.sx")
 
-// Applies gravity to all entities in the scene.
-// gravity > 0  => pulls entities downward (Y axis)
-// gravity == 0 => no force, entities float
-// gravity < 0  => pushes entities upward
-//
-// If scene.floor is set, entities collide with the floor plane at floor.y.
-// restitution 0.0 = dead stop, 1.0 = full elastic bounce.
-pub fn update_physics(scene: mut ecs.Scene3D, dt: f32) void = {
-    val g: f32 = scene.gravity
-    val si: mut usize = 0 as usize
-    val slen: usize = @len(scene.spheres)
+pub type PhysicsConfig = {
+    max_step_seconds: f32
+    max_substeps: i32
+    rest_velocity: f32
+}
 
-    for si < slen {
-        if @get(scene.spheres, si) is some sphere {
-            val s: mut ecs.SphereEntity = sphere
-            s.velocity.y = s.velocity.y - g * dt
-            s.position.x = s.position.x + s.velocity.x * dt
-            s.position.y = s.position.y + s.velocity.y * dt
-            s.position.z = s.position.z + s.velocity.z * dt
-            if scene.floor is some floor {
-                val contact_y: f32 = floor.y + s.radius
-                if s.position.y < contact_y {
-                    s.position.y = contact_y
-                    s.velocity.y = -(s.velocity.y * floor.restitution)
-                }
-            }
-            @set(scene.spheres, si, s)
-        }
-        si += (1 as usize)
+pub fn default_physics_config() PhysicsConfig = {
+    return {
+        max_step_seconds: 1.0 as f32 / 120.0 as f32,
+        max_substeps: 8 as i32,
+        rest_velocity: 0.035 as f32
     }
+}
 
-    val ci: mut usize = 0 as usize
-    val clen: usize = @len(scene.cubes)
+fn clamp_unit(value: f32) f32 = {
+    if value < (0.0 as f32) { return 0.0 as f32 }
+    if value > (1.0 as f32) { return 1.0 as f32 }
+    return value
+}
 
-    for ci < clen {
-        if @get(scene.cubes, ci) is some cube {
-            val c: mut ecs.CubeEntity = cube
-            c.velocity.y = c.velocity.y - g * dt
-            c.position.x = c.position.x + c.velocity.x * dt
-            c.position.y = c.position.y + c.velocity.y * dt
-            c.position.z = c.position.z + c.velocity.z * dt
+fn absolute(value: f32) f32 = {
+    if value < (0.0 as f32) { return -value }
+    return value
+}
+
+fn integrate_spheres(scene: mut ecs.Scene3D, dt: f32, rest_velocity: f32) void = {
+    val g: f32 = scene.gravity
+    val index: mut usize = 0 as usize
+    val count: usize = @len(scene.spheres)
+
+    for index < count {
+        if @get(scene.spheres, index) is some sphere {
+            val body: mut ecs.SphereEntity = sphere
+            body.velocity.y = body.velocity.y - g * dt
+            body.position.x = body.position.x + body.velocity.x * dt
+            body.position.y = body.position.y + body.velocity.y * dt
+            body.position.z = body.position.z + body.velocity.z * dt
+
             if scene.floor is some floor {
-                val contact_y: f32 = floor.y + c.size * (0.5 as f32)
-                if c.position.y < contact_y {
-                    c.position.y = contact_y
-                    c.velocity.y = -(c.velocity.y * floor.restitution)
+                val contact_y: f32 = floor.y + body.radius
+                if body.position.y < contact_y {
+                    body.position.y = contact_y
+                    body.velocity.y = -(body.velocity.y * clamp_unit(floor.restitution))
+                    if absolute(body.velocity.y) < rest_velocity {
+                        body.velocity.y = 0.0 as f32
+                    }
                 }
             }
-            @set(scene.cubes, ci, c)
+            @set(scene.spheres, index, body)
         }
-        ci += (1 as usize)
+        index += (1 as usize)
+    }
+}
+
+fn integrate_cubes(scene: mut ecs.Scene3D, dt: f32, rest_velocity: f32) void = {
+    val g: f32 = scene.gravity
+    val index: mut usize = 0 as usize
+    val count: usize = @len(scene.cubes)
+
+    for index < count {
+        if @get(scene.cubes, index) is some cube {
+            val body: mut ecs.CubeEntity = cube
+            body.velocity.y = body.velocity.y - g * dt
+            body.position.x = body.position.x + body.velocity.x * dt
+            body.position.y = body.position.y + body.velocity.y * dt
+            body.position.z = body.position.z + body.velocity.z * dt
+
+            if scene.floor is some floor {
+                val contact_y: f32 = floor.y + body.size * (0.5 as f32)
+                if body.position.y < contact_y {
+                    body.position.y = contact_y
+                    body.velocity.y = -(body.velocity.y * clamp_unit(floor.restitution))
+                    if absolute(body.velocity.y) < rest_velocity {
+                        body.velocity.y = 0.0 as f32
+                    }
+                }
+            }
+            @set(scene.cubes, index, body)
+        }
+        index += (1 as usize)
+    }
+}
+
+fn integrate_step(scene: mut ecs.Scene3D, dt: f32, config: PhysicsConfig) void = {
+    integrate_spheres(scene, dt, config.rest_velocity)
+    integrate_cubes(scene, dt, config.rest_velocity)
+}
+
+pub fn update_physics_with_config(scene: mut ecs.Scene3D, dt: f32, config: PhysicsConfig) void = {
+    if dt <= (0.0 as f32) { return }
+
+    val max_step: mut f32 = config.max_step_seconds
+    if max_step <= (0.0 as f32) { max_step = 1.0 as f32 / 120.0 as f32 }
+
+    val max_substeps: mut i32 = config.max_substeps
+    if max_substeps < (1 as i32) { max_substeps = 1 as i32 }
+    if max_substeps > (32 as i32) { max_substeps = 32 as i32 }
+
+    val max_frame_time: f32 = max_step * (max_substeps as f32)
+    val remaining: mut f32 = dt
+    if remaining > max_frame_time { remaining = max_frame_time }
+
+    val substep: mut i32 = 0 as i32
+    for remaining > (0.0 as f32) && substep < max_substeps {
+        val step: mut f32 = remaining
+        if step > max_step { step = max_step }
+        integrate_step(scene, step, config)
+        remaining = remaining - step
+        substep += (1 as i32)
+    }
+}
+
+pub fn update_physics(scene: mut ecs.Scene3D, dt: f32) void = {
+    update_physics_with_config(scene, dt, default_physics_config())
+}
+
+test {
+    val scene: mut ecs.Scene3D = ecs.new_scene(ecs.default_light())
+    scene.floor = some ecs.make_floor(0.0 as f32, 0.0 as f32)
+    @append(scene.spheres, ecs.make_sphere(
+        ecs.make_vec3(0.0 as f32, 0.2 as f32, 0.0 as f32),
+        ecs.make_vec3(1.0 as f32, 1.0 as f32, 1.0 as f32),
+        0.5 as f32
+    ))
+    update_physics(scene, 1.0 as f32)
+    if @get(scene.spheres, 0 as usize) is some sphere {
+        assert sphere.position.y >= (0.5 as f32)
+        assert sphere.velocity.y == (0.0 as f32)
+    } else {
+        assert false
     }
 }
