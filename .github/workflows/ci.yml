@@ -64,13 +64,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential clang cmake curl git glslang-tools ninja-build pkg-config
 
-      - name: Build and install SDL3 3.4.8
+      - name: Build and install headless SDL3 3.4.8
         run: |
           git clone --depth 1 --branch release-3.4.8 https://github.com/libsdl-org/SDL.git /tmp/SDL
           cmake -S /tmp/SDL -B /tmp/SDL-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DSDL_SHARED=ON \
             -DSDL_STATIC=OFF \
+            -DSDL_INSTALL=ON \
+            -DSDL_UNIX_CONSOLE_BUILD=ON \
             -DSDL_TEST_LIBRARY=OFF \
             -DSDL_TESTS=OFF
           cmake --build /tmp/SDL-build --parallel 2
