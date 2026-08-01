@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: exo-engine-hardening-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   migrate:
     if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip agent-refactor]')
