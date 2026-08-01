@@ -1,0 +1,22 @@
+val engine     = use("engine.sx")
+val validation = use("app_validation.sx")
+
+pub fn new_app() engine.ExoAppBuilder = {
+    return engine.new_app()
+}
+
+pub fn build_app(builder: engine.ExoAppBuilder) engine.ExoApp = {
+    return validation.build_with_safe_defaults(builder)
+}
+
+pub fn build_checked(builder: engine.ExoAppBuilder) option[engine.ExoApp] = {
+    return validation.build_checked(builder)
+}
+
+pub fn run(app: engine.ExoApp) i32 = trust {
+    return engine.run_app(app)
+}
+
+pub fn run_with_scene_updater[U: engine.SceneUpdater](app: engine.ExoApp, updater: U) i32 = trust {
+    return engine.run_app_with_scene_updater[U](app, updater)
+}
