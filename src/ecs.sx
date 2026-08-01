@@ -4,12 +4,19 @@ pub type Vec3 = {
     z: f32
 }
 
+pub type SurfaceMaterial = {
+    color: Vec3
+    reflective: f32
+    emissive: f32
+}
+
 pub spec SceneEntity = {
     pub fn se_position(e: self) Vec3
     pub fn se_color(e: self) Vec3
     pub fn se_scale(e: self) f32
     pub fn se_rotation(e: self, time: f32) f32
     pub fn se_reflective(e: self) f32
+    pub fn se_emissive(e: self) f32
     pub fn se_is_sphere(e: self) bool
 }
 
@@ -18,6 +25,8 @@ pub type (SceneEntity) SphereEntity = {
     color: Vec3
     radius: f32
     velocity: mut Vec3
+    reflective: f32
+    emissive: f32
 }
 
 pub type (SceneEntity) CubeEntity = {
@@ -26,20 +35,24 @@ pub type (SceneEntity) CubeEntity = {
     size: f32
     rotation_speed: f32
     velocity: mut Vec3
+    reflective: f32
+    emissive: f32
 }
 
 pub fn (SphereEntity) se_position(e: self) Vec3 = { return e.position }
 pub fn (SphereEntity) se_color(e: self) Vec3 = { return e.color }
 pub fn (SphereEntity) se_scale(e: self) f32 = { return e.radius }
 pub fn (SphereEntity) se_rotation(_: self, _: f32) f32 = { return 0.0 as f32 }
-pub fn (SphereEntity) se_reflective(_: self) f32 = { return 0.12 as f32 }
+pub fn (SphereEntity) se_reflective(e: self) f32 = { return e.reflective }
+pub fn (SphereEntity) se_emissive(e: self) f32 = { return e.emissive }
 pub fn (SphereEntity) se_is_sphere(_: self) bool = { return true }
 
 pub fn (CubeEntity) se_position(e: self) Vec3 = { return e.position }
 pub fn (CubeEntity) se_color(e: self) Vec3 = { return e.color }
 pub fn (CubeEntity) se_scale(e: self) f32 = { return e.size }
 pub fn (CubeEntity) se_rotation(e: self, time: f32) f32 = { return time * e.rotation_speed }
-pub fn (CubeEntity) se_reflective(_: self) f32 = { return 0.08 as f32 }
+pub fn (CubeEntity) se_reflective(e: self) f32 = { return e.reflective }
+pub fn (CubeEntity) se_emissive(e: self) f32 = { return e.emissive }
 pub fn (CubeEntity) se_is_sphere(_: self) bool = { return false }
 
 pub type PointLight = {
@@ -72,93 +85,142 @@ pub type GlbModel = {
     texture_length: mut usize
 }
 
-/// A flat infinite floor at a given Y height that entities collide with.
-///
-///    - restitution: 0.0 = entities stop dead
-///    - 1.0 = perfectly elastic bounce.
 pub type FloorCollider = {
-    y:           f32
+    y: f32
     restitution: f32
+    offset_x: f32
+    offset_z: f32
+    size_x: f32
+    size_z: f32
+    thickness: f32
+    color: Vec3
 }
 
-// A flat animated water surface rendered at a given Y height.
-//
-// wave_speed:      how fast the wave pattern scrolls
-// wave_amplitude:  vertical displacement scale (visual only, via shader uniforms)
-// wave_frequency:  spatial frequency of the wave pattern
-// size_x / size_z: extent of the water plane in world units
 pub type WaterSurface = {
-    y:              f32
-    offset_x:       f32
-    offset_z:       f32
-    wave_speed:     f32
+    y: f32
+    offset_x: f32
+    offset_z: f32
+    wave_speed: f32
     wave_amplitude: f32
     wave_frequency: f32
-    size_x:         f32
-    size_z:         f32
-    fit_scale:      f32
-    color:          Vec3
-    corner_radius:  f32
+    size_x: f32
+    size_z: f32
+    fit_scale: f32
+    color: Vec3
+    corner_radius: f32
 }
 
 pub type Scene3D = {
-    spheres:     mut list[SphereEntity]
-    cubes:       mut list[CubeEntity]
-    model:       mut GlbModel
+    spheres: mut list[SphereEntity]
+    cubes: mut list[CubeEntity]
+    model: mut GlbModel
+    model_position: mut Vec3
     model_scale: mut f32
-    light:       PointLight
-    gravity:     mut f32
-    floor:       mut option[FloorCollider]
-    water:       mut option[WaterSurface]
-}
-
-pub fn make_water(y: f32, offset_x: f32, offset_z: f32, size_x: f32, size_z: f32, color: Vec3, wave_speed: f32, wave_amplitude: f32, wave_frequency: f32, corner_radius: f32) WaterSurface = {
-    return {
-        y:              y,
-        offset_x:       offset_x,
-        offset_z:       offset_z,
-        wave_speed:     wave_speed,
-        wave_amplitude: wave_amplitude,
-        wave_frequency: wave_frequency,
-        size_x:         size_x,
-        size_z:         size_z,
-        fit_scale:      1.0 as f32,
-        color:          color,
-        corner_radius:  corner_radius
-    }
-}
-
-pub fn make_floor(y: f32, restitution: f32) FloorCollider = {
-    return { y: y, restitution: restitution }
+    model_rotation_y: mut f32
+    light: PointLight
+    gravity: mut f32
+    floor: mut option[FloorCollider]
+    water: mut option[WaterSurface]
 }
 
 pub fn make_vec3(x: f32, y: f32, z: f32) Vec3 = {
     return { x: x, y: y, z: z }
 }
 
-pub fn make_sphere(position: Vec3, color: Vec3, radius: f32) SphereEntity = {
+pub fn default_sphere_material(color: Vec3) SurfaceMaterial = {
+    return { color: color, reflective: 0.12 as f32, emissive: 0.0 as f32 }
+}
+
+pub fn default_cube_material(color: Vec3) SurfaceMaterial = {
+    return { color: color, reflective: 0.08 as f32, emissive: 0.0 as f32 }
+}
+
+pub fn make_sphere_with_material(position: Vec3, radius: f32, material: SurfaceMaterial) SphereEntity = {
     return {
         position: position,
-        color: color,
+        color: material.color,
         radius: radius,
-        velocity: { x: 0.0 as f32, y: 0.0 as f32, z: 0.0 as f32 }
+        velocity: make_vec3(0.0 as f32, 0.0 as f32, 0.0 as f32),
+        reflective: material.reflective,
+        emissive: material.emissive
+    }
+}
+
+pub fn make_sphere(position: Vec3, color: Vec3, radius: f32) SphereEntity = {
+    return make_sphere_with_material(position, radius, default_sphere_material(color))
+}
+
+pub fn make_cube_with_material(position: Vec3, size: f32, rotation_speed: f32, material: SurfaceMaterial) CubeEntity = {
+    return {
+        position: position,
+        color: material.color,
+        size: size,
+        rotation_speed: rotation_speed,
+        velocity: make_vec3(0.0 as f32, 0.0 as f32, 0.0 as f32),
+        reflective: material.reflective,
+        emissive: material.emissive
     }
 }
 
 pub fn make_cube(position: Vec3, color: Vec3, size: f32, rotation_speed: f32) CubeEntity = {
+    return make_cube_with_material(position, size, rotation_speed, default_cube_material(color))
+}
+
+pub fn make_floor_surface(
+    y: f32,
+    restitution: f32,
+    offset_x: f32,
+    offset_z: f32,
+    size_x: f32,
+    size_z: f32,
+    thickness: f32,
+    color: Vec3
+) FloorCollider = {
     return {
-        position: position,
+        y: y,
+        restitution: restitution,
+        offset_x: offset_x,
+        offset_z: offset_z,
+        size_x: size_x,
+        size_z: size_z,
+        thickness: thickness,
+        color: color
+    }
+}
+
+pub fn make_floor(y: f32, restitution: f32) FloorCollider = {
+    return make_floor_surface(
+        y,
+        restitution,
+        0.0 as f32,
+        -1.45 as f32,
+        7.8 as f32,
+        7.8 as f32,
+        0.16 as f32,
+        make_vec3(0.03 as f32, 0.06 as f32, 0.08 as f32)
+    )
+}
+
+pub fn make_water(y: f32, offset_x: f32, offset_z: f32, size_x: f32, size_z: f32, color: Vec3, wave_speed: f32, wave_amplitude: f32, wave_frequency: f32, corner_radius: f32) WaterSurface = {
+    return {
+        y: y,
+        offset_x: offset_x,
+        offset_z: offset_z,
+        wave_speed: wave_speed,
+        wave_amplitude: wave_amplitude,
+        wave_frequency: wave_frequency,
+        size_x: size_x,
+        size_z: size_z,
+        fit_scale: 1.0 as f32,
         color: color,
-        size: size,
-        rotation_speed: rotation_speed,
-        velocity: { x: 0.0 as f32, y: 0.0 as f32, z: 0.0 as f32 }
+        corner_radius: corner_radius
     }
 }
 
 pub fn default_light() PointLight = {
     return {
-        position: { x: 0.0 as f32, y: 4.0 as f32, z: 0.0 as f32 },
-        color: { x: 1.0 as f32, y: 0.92 as f32, z: 0.78 as f32 },
+        position: make_vec3(0.0 as f32, 4.0 as f32, 0.0 as f32),
+        color: make_vec3(1.0 as f32, 0.92 as f32, 0.78 as f32),
         intensity: 1.6 as f32,
         radius: 7.0 as f32
     }
@@ -195,13 +257,15 @@ pub fn empty_model() GlbModel = {
 
 pub fn new_scene(light: PointLight) Scene3D = {
     return {
-        spheres:     [],
-        cubes:       [],
-        model:       empty_model(),
+        spheres: [],
+        cubes: [],
+        model: empty_model(),
+        model_position: make_vec3(0.0 as f32, 0.0 as f32, 0.0 as f32),
         model_scale: 1.0 as f32,
-        light:       light,
-        gravity:     9.8 as f32,
-        floor:       none,
-        water:       none
+        model_rotation_y: 0.0 as f32,
+        light: light,
+        gravity: 9.8 as f32,
+        floor: none,
+        water: none
     }
 }
