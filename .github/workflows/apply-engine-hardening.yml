@@ -1,0 +1,55 @@
+name: Apply engine hardening
+
+on:
+  push:
+    branches:
+      - agent/exo-engine-hardening-refactor
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip agent-refactor]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Validate migration tooling
+        run: python -m compileall -q tools/refactor scripts
+
+      - name: Apply engine hardening
+        run: python -m tools.refactor.apply
+
+      - name: Install GPL-3.0-only license text
+        run: curl --fail --location --proto '=https' --tlsv1.2 https://www.gnu.org/licenses/gpl-3.0.txt --output LICENSE
+
+      - name: Preserve executable build entrypoints
+        run: chmod +x scripts/build.sh scripts/compile_shaders.py scripts/check_repo.py tools/refactor/apply.py
+
+      - name: Validate transformed repository
+        run: |
+          git diff --check
+          python scripts/check_repo.py
+
+      - name: Commit migration result
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/engine.sx LICENSE scripts/build.sh scripts/compile_shaders.py scripts/check_repo.py tools/refactor/apply.py
+          if git diff --cached --quiet; then
+            echo "No migration changes to commit."
+            exit 0
+          fi
+          git commit -m "engine: apply generated hardening [skip agent-refactor]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
